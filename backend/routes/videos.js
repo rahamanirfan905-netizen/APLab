@@ -143,31 +143,127 @@ router.get('/stream/:id', (req, res) => {
 })
 
 // GET /api/videos - list (supports ?title=)
+router.get('/', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const titleQuery = (req.query.title || '').trim().toLowerCase()
 
+  if (!titleQuery) {
+    return res.json(videos)
+  }
+
+  const filtered = videos.filter((video) =>
+    (video.title || '').toLowerCase().includes(titleQuery)
+  )
+
+  return res.json(filtered)
+})
 
 // GET /api/videos/:id
+router.get('/:id', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const video = videos.find((item) => item._id === req.params.id)
 
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' })
+  }
+
+  video.views = Number(video.views || 0) + 1
+  writeJSON(videosFile, videos)
+  return res.json(video)
+})
 
 // PUT /api/videos/:id/like  { like: true }
+router.put('/:id/like', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const video = videos.find((item) => item._id === req.params.id)
 
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' })
+  }
+
+  const { like } = req.body || {}
+  if (typeof like !== 'boolean') {
+    return res.status(400).json({ error: 'Request body must include a boolean like value' })
+  }
+
+  video.likes = Math.max(0, Number(video.likes || 0) + (like ? 1 : -1))
+  writeJSON(videosFile, videos)
+  return res.json({ likes: video.likes })
+})
 
 // PUT /api/videos/:id/comments  { author, text }
+router.put('/:id/comments', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const video = videos.find((item) => item._id === req.params.id)
 
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' })
+  }
+
+  const { author, text } = req.body || {}
+  if (!author || !text) {
+    return res.status(400).json({ error: 'author and text are required' })
+  }
+
+  const comment = {
+    _id: generateId(),
+    author: String(author).trim(),
+    text: String(text).trim(),
+    createdAt: new Date().toISOString()
+  }
+
+  video.comments = Array.isArray(video.comments) ? [...video.comments, comment] : [comment]
+  writeJSON(videosFile, videos)
+  return res.json(video.comments)
+})
 
 // GET /api/videos/:id/likes
+router.get('/:id/likes', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const video = videos.find((item) => item._id === req.params.id)
 
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' })
+  }
+
+  return res.json({ likes: Number(video.likes || 0) })
+})
 
 // GET /api/videos/:id/comments
+router.get('/:id/comments', (req, res) => {
+  const videos = readJSON(videosFile) || []
+  const video = videos.find((item) => item._id === req.params.id)
 
+  if (!video) {
+    return res.status(404).json({ error: 'Video not found' })
+  }
+
+  return res.json(Array.isArray(video.comments) ? video.comments : [])
+})
 
 // GET /api/videos/watch-history — Get watch history
-
+router.get('/watch-history', (req, res) => {
+  return res.json(readHistory())
+})
 
 // POST /api/videos/watch-history — Add to history
+router.post('/watch-history', (req, res) => {
+  const { videoId } = req.body || {}
+  if (!videoId) {
+    return res.status(400).json({ error: 'videoId is required' })
+  }
 
+  const history = readHistory()
+  history.push({ videoId, watchedAt: new Date().toISOString() })
+  writeHistory(history)
+
+  return res.status(201).json(history)
+})
 
 // DELETE /api/videos/watch-history — Clear history
-
-
+router.delete('/watch-history', (req, res) => {
+  writeHistory([])
+  return res.json({ ok: true, cleared: true })
+})
 
 module.exports = router
